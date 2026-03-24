@@ -7,23 +7,37 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.*
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.*
+import androidx.compose.ui.window.Dialog
 import java.io.BufferedReader
+
+// ── DATA ───────────────────────────
 
 data class Student(val name: String, val score: Int?)
 
-fun formatStudentInfo(student: Student): String {
-    return student.score?.let {
-        "${student.name} - $it : Grade ${getGrade(it)}"
-    } ?: "${student.name} - No Score"
+fun getGrade(score: Int): Char = when (score) {
+    in 90..100 -> 'A'
+    in 80..89  -> 'B'
+    in 70..79  -> 'C'
+    in 60..69  -> 'D'
+    else       -> 'F'
 }
 
 fun isPassing(student: Student): Boolean {
@@ -31,21 +45,27 @@ fun isPassing(student: Student): Boolean {
     return score >= 60
 }
 
-fun processStudents(students: List<Student>, action: (Student) -> Unit) {
-    students.forEach(action)
+// ── COLORS ─────────────────────────
+
+private val Navy = Color(0xFF0D1B2A)
+private val Accent = Color(0xFF4FC3F7)
+private val CardBg = Color(0xFF1E2D42)
+private val GradeF = Color(0xFFFF5252)
+
+private fun gradeColor(grade: Char?) = when (grade) {
+    'A' -> Color.Green
+    'B' -> Color(0xFF69F0AE)
+    'C' -> Color.Yellow
+    'D' -> Color(0xFFFF9100)
+    'F' -> Color.Red
+    else -> Color.Gray
 }
 
-fun getGrade(score: Int): Char = when (score) {
-    in 90..100 -> 'A'
-    in 80..89 -> 'B'
-    in 70..79 -> 'C'
-    in 60..69 -> 'D'
-    else -> 'F'
-}
+// ── MAIN ACTIVITY ──────────────────
 
 class MainActivity : ComponentActivity() {
 
-    private var students = mutableStateOf(listOf<Student>())
+    private var students by mutableStateOf(listOf<Student>())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,239 +80,213 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainScreen() {
 
+        var showDialog by remember { mutableStateOf(false) }
+
         val importLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.OpenDocument()
-        ) { uri: Uri? ->
+        ) { uri ->
             uri?.let {
-                students.value = readCSV(it)
-
-                Toast.makeText(
-                    this,
-                    "Imported ${students.value.size} students",
-                    Toast.LENGTH_LONG
-                ).show()
+                students = readCSV(it)
+                Toast.makeText(this, "Imported ${students.size}", Toast.LENGTH_LONG).show()
             }
         }
 
         val exportLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.CreateDocument("text/csv")
-        ) { uri: Uri? ->
-            uri?.let { saveCSV(it, students.value) }
+        ) { uri ->
+            uri?.let { saveCSV(it, students) }
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp)
+        Box(
+            Modifier.fillMaxSize().background(Navy)
         ) {
 
-            TitleSection()
+            Column(Modifier.fillMaxSize().padding(16.dp)) {
 
-            Spacer(Modifier.height(24.dp))
-
-            ImportExportButtons(importLauncher, exportLauncher)
-
-            Spacer(Modifier.height(24.dp))
-
-            AverageScoreSection(students.value)
-
-            Spacer(Modifier.height(24.dp))
-
-            StudentList(students.value)
-
-            Spacer(Modifier.height(16.dp))
-
-            val passingStudents = students.value.filter { isPassing(it) }
-
-            processStudents(passingStudents) {
-                println("Passing student: ${it.name}")
-            }
-        }
-    }
-
-    @Composable
-    fun TitleSection() {
-        Text(
-            text = "Student Grade Calculator",
-            fontSize = 28.sp,
-            color = Color(0xFF1A237E)
-        )
-    }
-
-    @Composable
-    fun ImportExportButtons(
-        importLauncher: androidx.activity.result.ActivityResultLauncher<Array<String>>,
-        exportLauncher: androidx.activity.result.ActivityResultLauncher<String>
-    ) {
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-
-            Button(onClick = {
-                importLauncher.launch(arrayOf("text/*"))
-            }) {
-                Text("Import CSV")
-            }
-
-            Button(onClick = {
-
-                if (students.value.isNotEmpty()) {
-                    exportLauncher.launch("Grades_Output.csv")
-                } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "No data to export",
-                        Toast.LENGTH_SHORT
-                    ).show()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, null, tint = Accent)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Grade Book", color = Color.White, fontSize = 24.sp)
                 }
 
-            }) {
-                Text("Export CSV")
-            }
-        }
-    }
+                Spacer(Modifier.height(20.dp))
 
-    @Composable
-    fun AverageScoreSection(students: List<Student>) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
 
-        val scores = students.mapNotNull { it.score }
-
-        val average =
-            if (scores.isNotEmpty()) scores.average()
-            else 0.0
-
-        Text(
-            text = "Average Score: ${"%.2f".format(average)}",
-            fontSize = 20.sp,
-            color = Color(0xFF1565C0)
-        )
-    }
-
-    @Composable
-    fun StudentList(students: List<Student>) {
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-
-            items(students) { student ->
-
-                val grade = student.score?.let { getGrade(it) }
-
-                val gradeColor = when (grade) {
-                    'A' -> Color(0xFF2E7D32)
-                    'B' -> Color(0xFF388E3C)
-                    'C' -> Color(0xFFF9A825)
-                    'D' -> Color(0xFFF57C00)
-                    'F' -> Color(0xFFD32F2F)
-                    else -> Color.Gray
-                }
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(6.dp)
-                ) {
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    Button(
+                        onClick = { importLauncher.launch(arrayOf("text/*")) },
+                        modifier = Modifier.weight(1f)
                     ) {
+                        Icon(Icons.Default.Menu, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text("Import")
+                    }
 
-                        Text(student.name, fontSize = 18.sp)
+                    Button(
+                        onClick = {
+                            if (students.isNotEmpty()) {
+                                exportLauncher.launch("Grades.csv")
+                            } else {
+                                Toast.makeText(this@MainActivity, "No data", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Star, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text("Export")
+                    }
+                }
 
-                        Text(
-                            student.score?.let { "$it ($grade)" } ?: "No Score",
-                            fontSize = 18.sp,
-                            color = gradeColor
-                        )
+                Spacer(Modifier.height(20.dp))
+
+                LazyColumn {
+                    items(students) { student ->
+                        StudentCard(student)
+                    }
+                }
+            }
+
+            FloatingActionButton(
+                onClick = { showDialog = true },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
+            ) {
+                Icon(Icons.Default.Add, null)
+            }
+        }
+
+        if (showDialog) {
+            AddStudentDialog(
+                onDismiss = { showDialog = false },
+                onAdd = { name, score ->
+                    students = students + Student(name, score)
+                    showDialog = false
+                }
+            )
+        }
+    }
+
+    // ── STUDENT CARD ────────────────
+
+    @Composable
+    fun StudentCard(student: Student) {
+        val grade = student.score?.let { getGrade(it) }
+
+        Card(
+            Modifier.fillMaxWidth().padding(6.dp),
+            colors = CardDefaults.cardColors(containerColor = CardBg)
+        ) {
+            Row(Modifier.padding(16.dp)) {
+
+                Text(
+                    grade?.toString() ?: "-",
+                    color = gradeColor(grade),
+                    fontSize = 20.sp
+                )
+
+                Spacer(Modifier.width(10.dp))
+
+                Column {
+                    Text(student.name, color = Color.White)
+                    Text("Score: ${student.score ?: "None"}", color = Color.Gray)
+                }
+            }
+        }
+    }
+
+    // ── DIALOG ─────────────────────
+
+    @Composable
+    fun AddStudentDialog(onDismiss: () -> Unit, onAdd: (String, Int?) -> Unit) {
+
+        var name by remember { mutableStateOf("") }
+        var score by remember { mutableStateOf("") }
+        var nameError by remember { mutableStateOf(false) }
+        var scoreError by remember { mutableStateOf(false) }
+
+        Dialog(onDismissRequest = onDismiss) {
+            Card(shape = RoundedCornerShape(12.dp)) {
+                Column(Modifier.padding(16.dp)) {
+
+                    Text("Add Student")
+
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it; nameError = false },
+                        label = { Text("Name") },
+                        isError = nameError,
+                        supportingText = if (nameError) {
+                            { Text("Name required", color = GradeF) }
+                        } else null
+                    )
+
+                    OutlinedTextField(
+                        value = score,
+                        onValueChange = { score = it; scoreError = false },
+                        label = { Text("Score") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = scoreError,
+                        supportingText = if (scoreError) {
+                            { Text("Invalid score", color = GradeF) }
+                        } else null
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    Button(onClick = {
+                        val parsed = score.toIntOrNull()
+
+                        nameError = name.isBlank()
+                        scoreError = score.isNotBlank() && (parsed == null || parsed !in 0..100)
+
+                        if (!nameError && !scoreError) {
+                            onAdd(name.trim(), parsed)
+                        }
+                    }) {
+                        Text("Add")
                     }
                 }
             }
         }
     }
+
+    // ── CSV ────────────────────────
 
     private fun readCSV(uri: Uri): List<Student> {
-
-        val studentsList = mutableListOf<Student>()
-
+        val list = mutableListOf<Student>()
         try {
-
             contentResolver.openInputStream(uri)?.use { stream ->
-
                 BufferedReader(stream.reader()).useLines { lines ->
-
                     lines.drop(1).forEach { line ->
+                        val parts = line.split(",")
+                        val name = parts.getOrNull(0)?.trim().orEmpty()
+                        val score = parts.getOrNull(1)?.trim()?.toIntOrNull()
 
-                        val tokens = line.split(",")
-
-                        val name = tokens.getOrNull(0)?.trim().orEmpty()
-
-                        val score =
-                            tokens.getOrNull(1)
-                                ?.trim()
-                                ?.toIntOrNull()
-
-                        studentsList.add(Student(name, score))
+                        if (name.isNotBlank()) {
+                            list.add(Student(name, score))
+                        }
                     }
                 }
             }
-
         } catch (e: Exception) {
-
-            e.printStackTrace()
-
-            Toast.makeText(
-                this,
-                "Error reading CSV",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "Error reading CSV", Toast.LENGTH_SHORT).show()
         }
-
-        return studentsList
+        return list
     }
 
     private fun saveCSV(uri: Uri, students: List<Student>) {
-
         try {
-
-            contentResolver.openOutputStream(uri)
-                ?.bufferedWriter()
-                ?.use { writer ->
-
-                    writer.write("Name,Score,Grade\n")
-
-                    students.forEach {
-
-                        val score =
-                            it.score?.toString() ?: ""
-
-                        val grade =
-                            it.score?.let { s -> getGrade(s) }
-                                ?: "No Score"
-
-                        writer.write("${it.name},$score,$grade\n")
-                    }
+            contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { writer ->
+                writer.write("Name,Score,Grade\n")
+                students.forEach {
+                    val score = it.score?.toString() ?: ""
+                    val grade = it.score?.let { s -> getGrade(s) } ?: "No Score"
+                    writer.write("${it.name},$score,$grade\n")
                 }
-
-            Toast.makeText(
-                this,
-                "CSV exported successfully!",
-                Toast.LENGTH_LONG
-            ).show()
-
+            }
+            Toast.makeText(this, "Exported!", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
-
-            e.printStackTrace()
-
-            Toast.makeText(
-                this,
-                "Error exporting CSV",
-                Toast.LENGTH_SHORT
-            ).show()
+            Toast.makeText(this, "Export failed", Toast.LENGTH_SHORT).show()
         }
     }
 }
